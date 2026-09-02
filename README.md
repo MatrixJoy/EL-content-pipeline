@@ -28,6 +28,8 @@ go run ./cmd/library-sync -limit 10
 
 默认启用 VOA connector，读取其官方 sitemap，只处理有 MP3 的文章并跳过视频 sitemap。使用 `source-id + URL` 记录独立抓取状态，多数据源之间不会碰撞。
 
+VOA 当前最新索引包含大量无音频普通新闻。首次建库可用 `CONTENT_VOA_MAX_ARTICLE_ID` 设置历史游标，从已验证的音频内容段开始；设为 `0` 表示不限制。该字段只属于 VOA connector，不进入通用内容模型。
+
 新增数据源只需实现 `source.Connector`，提供来源 ID、发现列表、规范化候选内容与媒体下载；Pipeline、分类器、存储和 CMS 契约不需要修改。
 
 ## 部署与迁移

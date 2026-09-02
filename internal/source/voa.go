@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,16 +22,17 @@ import (
 )
 
 type Client struct {
-	http      *http.Client
-	userAgent string
-	delay     time.Duration
-	mu        sync.Mutex
-	last      time.Time
-	sitemap   string
+	http         *http.Client
+	userAgent    string
+	delay        time.Duration
+	mu           sync.Mutex
+	last         time.Time
+	sitemap      string
+	maxArticleID int
 }
 
-func NewVOA(sitemap, userAgent string, delay time.Duration) *Client {
-	return &Client{http: &http.Client{Timeout: 45 * time.Second}, sitemap: sitemap, userAgent: userAgent, delay: delay}
+func NewVOA(sitemap, userAgent string, delay time.Duration, maxArticleID int) *Client {
+	return &Client{http: &http.Client{Timeout: 45 * time.Second}, sitemap: sitemap, userAgent: userAgent, delay: delay, maxArticleID: maxArticleID}
 }
 
 func (c *Client) ID() string          { return "voa-learning-english" }
@@ -116,7 +118,7 @@ func (c *Client) Discover(ctx context.Context) ([]domain.Item, error) {
 		}
 		for _, item := range sm.URLs {
 			u, err := url.Parse(item.Loc)
-			if err == nil && u.Host == "learningenglish.voanews.com" && strings.HasPrefix(u.Path, "/a/") && strings.HasSuffix(u.Path, ".html") {
+			if err == nil && u.Host == "learningenglish.voanews.com" && strings.HasPrefix(u.Path, "/a/") && strings.HasSuffix(u.Path, ".html") && c.withinArticleRange(item.Loc) {
 				modified, _ := time.Parse(time.RFC3339, item.LastMod)
 				if modified.IsZero() {
 					modified, _ = time.Parse("2006-01-02", item.LastMod)
@@ -135,6 +137,18 @@ func (c *Client) Discover(ctx context.Context) ([]domain.Item, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].LastModified.After(out[j].LastModified) })
 	return out, nil
+}
+
+func (c *Client) withinArticleRange(rawURL string) bool {
+	if c.maxArticleID <= 0 {
+		return true
+	}
+	match := idPattern.FindStringSubmatch(rawURL)
+	if len(match) < 2 {
+		return false
+	}
+	id, err := strconv.Atoi(match[1])
+	return err == nil && id <= c.maxArticleID
 }
 
 var idPattern = regexp.MustCompile(`(\d+)\.html$`)

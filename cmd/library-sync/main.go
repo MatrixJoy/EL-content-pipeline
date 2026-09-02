@@ -41,7 +41,7 @@ func main() {
 	var connector source.Connector
 	switch *sourceID {
 	case "voa":
-		connector = source.NewVOA(cfg.Sitemap, cfg.UserAgent, cfg.Delay)
+		connector = source.NewVOA(cfg.Sitemap, cfg.UserAgent, cfg.Delay, cfg.VOAMaxArticleID)
 	default:
 		logger.Error("unknown source", "source", *sourceID)
 		os.Exit(2)

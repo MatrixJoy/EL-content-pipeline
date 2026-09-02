@@ -17,7 +17,7 @@ func TestClientReadsGzipByMagicWithoutContentEncoding(t *testing.T) {
 		_ = writer.Close()
 	}))
 	defer server.Close()
-	c := NewVOA(server.URL, "test", time.Millisecond)
+	c := NewVOA(server.URL, "test", time.Millisecond, 0)
 	body, _, err := c.get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatal(err)
