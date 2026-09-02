@@ -1,15 +1,15 @@
 # VOA Content Pipeline
 
-独立于 App 后台的音频学习资料采集工程。它只生产可审核的内容包，不直接发布内容，也不调用 App API。
+独立于 App 后台的多数据源音频学习资料采集工程。它只生产可审核的内容包，不直接发布内容，也不调用 App API。VOA 是第一个 Source Connector，不是 Pipeline 的内置假设。
 
 ## 数据流
 
-`VOA sitemap -> 音频文章筛选 -> 原始网页 + 音频归档 -> 规范化与分类 -> candidate manifest -> CMS 审核 -> 后台导入`
+`Source Connector -> 音频文章筛选 -> 原始数据 + 音频归档 -> 统一模型 -> 分类器 -> candidate manifest -> CMS 审核 -> 后台导入`
 
 每篇资料保存为不可变对象：
 
 ```
-candidates/voa/<source-id>/
+candidates/<source-connector-id>/<content-id>/
   manifest.json
   article.json
   source.html
@@ -26,7 +26,9 @@ docker compose up -d minio
 go run ./cmd/library-sync -limit 10
 ```
 
-默认读取 VOA 官方 sitemap，只处理有 MP3 的文章，跳过视频 sitemap，使用 BoltDB 记录已成功和失败 URL，重复执行可断点续跑。
+默认启用 VOA connector，读取其官方 sitemap，只处理有 MP3 的文章并跳过视频 sitemap。使用 `source-id + URL` 记录独立抓取状态，多数据源之间不会碰撞。
+
+新增数据源只需实现 `source.Connector`，提供来源 ID、发现列表、规范化候选内容与媒体下载；Pipeline、分类器、存储和 CMS 契约不需要修改。
 
 ## 部署与迁移
 

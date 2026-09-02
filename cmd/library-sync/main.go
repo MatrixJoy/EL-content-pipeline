@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/oldj/voa-content-pipeline/internal/classify"
 	"github.com/oldj/voa-content-pipeline/internal/config"
 	"github.com/oldj/voa-content-pipeline/internal/pipeline"
 	"github.com/oldj/voa-content-pipeline/internal/source"
@@ -16,6 +17,7 @@ import (
 func main() {
 	limit := flag.Int("limit", 0, "maximum new URLs to inspect; 0 means all")
 	singleURL := flag.String("url", "", "inspect one article URL instead of discovering the sitemap")
+	sourceID := flag.String("source", "voa", "configured source connector")
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load()
@@ -36,11 +38,19 @@ func main() {
 		logger.Error("object storage failed", "error", err)
 		os.Exit(1)
 	}
-	runner := pipeline.Runner{Source: source.New(cfg.UserAgent, cfg.Delay), State: state, Objects: objects, Logger: logger}
+	var connector source.Connector
+	switch *sourceID {
+	case "voa":
+		connector = source.NewVOA(cfg.Sitemap, cfg.UserAgent, cfg.Delay)
+	default:
+		logger.Error("unknown source", "source", *sourceID)
+		os.Exit(2)
+	}
+	runner := pipeline.Runner{Source: connector, Classifier: classify.Rules{}, State: state, Objects: objects, Logger: logger}
 	if *singleURL != "" {
 		err = runner.RunURLs(ctx, []string{*singleURL}, 1)
 	} else {
-		err = runner.Run(ctx, cfg.Sitemap, *limit)
+		err = runner.Run(ctx, *limit)
 	}
 	if err != nil {
 		logger.Error("sync failed", "error", err)

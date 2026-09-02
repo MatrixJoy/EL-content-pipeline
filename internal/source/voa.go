@@ -25,11 +25,15 @@ type Client struct {
 	delay     time.Duration
 	mu        sync.Mutex
 	last      time.Time
+	sitemap   string
 }
 
-func New(userAgent string, delay time.Duration) *Client {
-	return &Client{http: &http.Client{Timeout: 45 * time.Second}, userAgent: userAgent, delay: delay}
+func NewVOA(sitemap, userAgent string, delay time.Duration) *Client {
+	return &Client{http: &http.Client{Timeout: 45 * time.Second}, sitemap: sitemap, userAgent: userAgent, delay: delay}
 }
+
+func (c *Client) ID() string          { return "voa-learning-english" }
+func (c *Client) Attribution() string { return "VOA Learning English" }
 
 func (c *Client) get(ctx context.Context, target string) ([]byte, string, error) {
 	c.mu.Lock()
@@ -68,12 +72,13 @@ type sitemap struct {
 		Loc string `xml:"loc"`
 	} `xml:"sitemap"`
 	URLs []struct {
-		Loc string `xml:"loc"`
+		Loc     string `xml:"loc"`
+		LastMod string `xml:"lastmod"`
 	} `xml:"url"`
 }
 
-func (c *Client) Discover(ctx context.Context, root string) ([]string, error) {
-	seen, articles := map[string]bool{}, map[string]bool{}
+func (c *Client) Discover(ctx context.Context) ([]domain.Item, error) {
+	seen, articles := map[string]bool{}, map[string]domain.Item{}
 	var walk func(string) error
 	walk = func(target string) error {
 		if seen[target] {
@@ -100,19 +105,23 @@ func (c *Client) Discover(ctx context.Context, root string) ([]string, error) {
 		for _, item := range sm.URLs {
 			u, err := url.Parse(item.Loc)
 			if err == nil && u.Host == "learningenglish.voanews.com" && strings.HasPrefix(u.Path, "/a/") && strings.HasSuffix(u.Path, ".html") {
-				articles[item.Loc] = true
+				modified, _ := time.Parse(time.RFC3339, item.LastMod)
+				if modified.IsZero() {
+					modified, _ = time.Parse("2006-01-02", item.LastMod)
+				}
+				articles[item.Loc] = domain.Item{URL: item.Loc, LastModified: modified}
 			}
 		}
 		return nil
 	}
-	if err := walk(root); err != nil {
+	if err := walk(c.sitemap); err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(articles))
-	for u := range articles {
-		out = append(out, u)
+	out := make([]domain.Item, 0, len(articles))
+	for _, item := range articles {
+		out = append(out, item)
 	}
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].LastModified.After(out[j].LastModified) })
 	return out, nil
 }
 
@@ -151,7 +160,11 @@ func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Can
 	}
 	series := clean(doc.Find(".category, .page-header__category").First().Text())
 	keywords := doc.Find(`meta[name="keywords"]`).AttrOr("content", "")
-	article := domain.Article{SchemaVersion: 1, ContentID: "voa-" + idMatch[1], SourceURL: pageURL, Title: title, Description: doc.Find(`meta[name="description"]`).AttrOr("content", ""), Series: series, PublishedAt: published(doc), Level: level(series + " " + keywords), Topics: topics(series, keywords), Paragraphs: paragraphs}
+	wordCount := 0
+	for _, paragraph := range paragraphs {
+		wordCount += len(strings.Fields(paragraph.Text))
+	}
+	article := domain.Article{SchemaVersion: 2, ContentID: "voa-" + idMatch[1], SourceURL: pageURL, Title: title, Description: doc.Find(`meta[name="description"]`).AttrOr("content", ""), Series: series, PublishedAt: published(doc), Level: level(series + " " + keywords), Topics: topics(series, keywords), Language: "en", WordCount: wordCount, Paragraphs: paragraphs}
 	return domain.Candidate{Article: article, HTML: body, AudioURL: audio, AudioType: "audio/mpeg"}, nil
 }
 

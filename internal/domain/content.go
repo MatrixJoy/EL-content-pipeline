@@ -17,7 +17,20 @@ type Article struct {
 	PublishedAt   string      `json:"published_at,omitempty"`
 	Level         string      `json:"level,omitempty"`
 	Topics        []string    `json:"topics,omitempty"`
+	Language      string      `json:"language"`
+	WordCount     int         `json:"word_count"`
 	Paragraphs    []Paragraph `json:"paragraphs"`
+}
+
+type Classification struct {
+	Media           string   `json:"media"`
+	Language        string   `json:"language"`
+	Level           string   `json:"level"`
+	LevelConfidence float64  `json:"level_confidence"`
+	Series          string   `json:"series,omitempty"`
+	Topics          []string `json:"topics"`
+	LearningGoals   []string `json:"learning_goals"`
+	QualityScore    int      `json:"quality_score"`
 }
 
 type Object struct {
@@ -35,7 +48,7 @@ type Manifest struct {
 	Source         string            `json:"source"`
 	SourceURL      string            `json:"source_url"`
 	CapturedAt     time.Time         `json:"captured_at"`
-	Classification map[string]any    `json:"classification"`
+	Classification Classification    `json:"classification"`
 	Objects        map[string]Object `json:"objects"`
 	Attribution    string            `json:"attribution"`
 }
@@ -45,4 +58,9 @@ type Candidate struct {
 	HTML      []byte
 	AudioURL  string
 	AudioType string
+}
+
+type Item struct {
+	URL          string
+	LastModified time.Time
 }
