@@ -1,0 +1,265 @@
+package source
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/oldj/voa-content-pipeline/internal/domain"
+)
+
+type Client struct {
+	http      *http.Client
+	userAgent string
+	delay     time.Duration
+	mu        sync.Mutex
+	last      time.Time
+}
+
+func New(userAgent string, delay time.Duration) *Client {
+	return &Client{http: &http.Client{Timeout: 45 * time.Second}, userAgent: userAgent, delay: delay}
+}
+
+func (c *Client) get(ctx context.Context, target string) ([]byte, string, error) {
+	c.mu.Lock()
+	wait := time.Until(c.last.Add(c.delay))
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			c.mu.Unlock()
+			return nil, "", ctx.Err()
+		case <-timer.C:
+		}
+	}
+	c.last = time.Now()
+	c.mu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("GET %s: %s", target, resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	return body, resp.Header.Get("Content-Type"), err
+}
+
+type sitemap struct {
+	Sitemaps []struct {
+		Loc string `xml:"loc"`
+	} `xml:"sitemap"`
+	URLs []struct {
+		Loc string `xml:"loc"`
+	} `xml:"url"`
+}
+
+func (c *Client) Discover(ctx context.Context, root string) ([]string, error) {
+	seen, articles := map[string]bool{}, map[string]bool{}
+	var walk func(string) error
+	walk = func(target string) error {
+		if seen[target] {
+			return nil
+		}
+		seen[target] = true
+		body, _, err := c.get(ctx, target)
+		if err != nil {
+			return err
+		}
+		var sm sitemap
+		if err = xml.Unmarshal(body, &sm); err != nil {
+			return fmt.Errorf("decode sitemap %s: %w", target, err)
+		}
+		for _, child := range sm.Sitemaps {
+			low := strings.ToLower(child.Loc)
+			if strings.Contains(low, "video") {
+				continue
+			}
+			if err := walk(child.Loc); err != nil {
+				return err
+			}
+		}
+		for _, item := range sm.URLs {
+			u, err := url.Parse(item.Loc)
+			if err == nil && u.Host == "learningenglish.voanews.com" && strings.HasPrefix(u.Path, "/a/") && strings.HasSuffix(u.Path, ".html") {
+				articles[item.Loc] = true
+			}
+		}
+		return nil
+	}
+	if err := walk(root); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(articles))
+	for u := range articles {
+		out = append(out, u)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+var idPattern = regexp.MustCompile(`(\d+)\.html$`)
+
+func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Candidate, error) {
+	body, _, err := c.get(ctx, pageURL)
+	if err != nil {
+		return domain.Candidate{}, err
+	}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		return domain.Candidate{}, err
+	}
+	audio := findAudio(doc, pageURL)
+	if audio == "" {
+		return domain.Candidate{}, fmt.Errorf("no audio")
+	}
+	title := clean(doc.Find("h1").First().Text())
+	if title == "" {
+		return domain.Candidate{}, fmt.Errorf("no title")
+	}
+	idMatch := idPattern.FindStringSubmatch(pageURL)
+	if len(idMatch) < 2 {
+		return domain.Candidate{}, fmt.Errorf("no source id")
+	}
+	paragraphs := make([]domain.Paragraph, 0)
+	doc.Find(".wsw p, .article-body p, .article__body p").Each(func(_ int, s *goquery.Selection) {
+		t := clean(s.Text())
+		if len(t) >= 20 {
+			paragraphs = append(paragraphs, domain.Paragraph{Index: len(paragraphs), Text: t})
+		}
+	})
+	if len(paragraphs) == 0 {
+		return domain.Candidate{}, fmt.Errorf("no learning text")
+	}
+	series := clean(doc.Find(".category, .page-header__category").First().Text())
+	keywords := doc.Find(`meta[name="keywords"]`).AttrOr("content", "")
+	article := domain.Article{SchemaVersion: 1, ContentID: "voa-" + idMatch[1], SourceURL: pageURL, Title: title, Description: doc.Find(`meta[name="description"]`).AttrOr("content", ""), Series: series, PublishedAt: published(doc), Level: level(series + " " + keywords), Topics: topics(series, keywords), Paragraphs: paragraphs}
+	return domain.Candidate{Article: article, HTML: body, AudioURL: audio, AudioType: "audio/mpeg"}, nil
+}
+
+func (c *Client) Download(ctx context.Context, target string) ([]byte, string, error) {
+	return c.get(ctx, target)
+}
+
+func findAudio(doc *goquery.Document, base string) string {
+	var choices []string
+	doc.Find(`a[href], audio[src], source[src]`).Each(func(_ int, s *goquery.Selection) {
+		v, ok := s.Attr("href")
+		if !ok {
+			v, _ = s.Attr("src")
+		}
+		low := strings.ToLower(v)
+		if strings.Contains(low, ".mp3") {
+			if u, err := url.Parse(v); err == nil {
+				b, _ := url.Parse(base)
+				choices = append(choices, b.ResolveReference(u).String())
+			}
+		}
+	})
+	sort.SliceStable(choices, func(i, j int) bool { return bitrate(choices[i]) > bitrate(choices[j]) })
+	if len(choices) > 0 {
+		return choices[0]
+	}
+	return findJSONAudio(doc)
+}
+func findJSONAudio(doc *goquery.Document) string {
+	var result string
+	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		var v any
+		if json.Unmarshal([]byte(s.Text()), &v) != nil {
+			return true
+		}
+		result = walkJSON(v)
+		return result == ""
+	})
+	return result
+}
+func walkJSON(v any) string {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, v := range x {
+			if k == "contentUrl" || k == "url" {
+				if s, ok := v.(string); ok && strings.Contains(strings.ToLower(s), ".mp3") {
+					return s
+				}
+			}
+			if s := walkJSON(v); s != "" {
+				return s
+			}
+		}
+	case []any:
+		for _, v := range x {
+			if s := walkJSON(v); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+func bitrate(s string) int {
+	if strings.Contains(s, "128") {
+		return 128
+	}
+	if strings.Contains(s, "64") {
+		return 64
+	}
+	return 1
+}
+func clean(s string) string { return strings.Join(strings.Fields(s), " ") }
+func published(doc *goquery.Document) string {
+	for _, sel := range []string{`meta[property="article:published_time"]`, `meta[name="date"]`, `time[datetime]`} {
+		s := doc.Find(sel).First()
+		if v, ok := s.Attr("content"); ok {
+			return v
+		}
+		if v, ok := s.Attr("datetime"); ok {
+			return v
+		}
+	}
+	return ""
+}
+func level(s string) string {
+	x := strings.ToLower(s)
+	switch {
+	case strings.Contains(x, "advanced"):
+		return "advanced"
+	case strings.Contains(x, "intermediate"):
+		return "intermediate"
+	case strings.Contains(x, "beginning"), strings.Contains(x, "let's learn english"):
+		return "beginning"
+	}
+	return "unclassified"
+}
+func topics(series, keywords string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, v := range strings.Split(series+","+keywords, ",") {
+		v = clean(v)
+		if v != "" && len(v) < 60 && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	if len(out) > 12 {
+		out = out[:12]
+	}
+	return out
+}
