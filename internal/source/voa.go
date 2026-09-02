@@ -2,6 +2,7 @@ package source
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -64,6 +65,17 @@ func (c *Client) get(ctx context.Context, target string) ([]byte, string, error)
 		return nil, "", fmt.Errorf("GET %s: %s", target, resp.Status)
 	}
 	body, err := io.ReadAll(resp.Body)
+	if err == nil && len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
+		reader, openErr := gzip.NewReader(bytes.NewReader(body))
+		if openErr != nil {
+			return nil, "", fmt.Errorf("open gzip %s: %w", target, openErr)
+		}
+		body, err = io.ReadAll(reader)
+		closeErr := reader.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}
 	return body, resp.Header.Get("Content-Type"), err
 }
 
