@@ -3,3 +3,5 @@
 /data/
 *.db
 *.db.lock
+__pycache__/
+*.py[cod]
