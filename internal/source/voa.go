@@ -177,7 +177,7 @@ func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Can
 	paragraphs := make([]domain.Paragraph, 0)
 	doc.Find(".wsw p, .article-body p, .article__body p").Each(func(_ int, s *goquery.Selection) {
 		t := clean(s.Text())
-		if len(t) >= 20 {
+		if len(t) >= 20 && !isBoilerplate(t) {
 			paragraphs = append(paragraphs, domain.Paragraph{Index: len(paragraphs), Text: t})
 		}
 	})
@@ -192,6 +192,16 @@ func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Can
 	}
 	article := domain.Article{SchemaVersion: 2, ContentID: "voa-" + idMatch[1], SourceURL: pageURL, Title: title, Description: doc.Find(`meta[name="description"]`).AttrOr("content", ""), Series: series, PublishedAt: published(doc), Level: level(series + " " + keywords), Topics: topics(series, keywords), Language: "en", WordCount: wordCount, Paragraphs: paragraphs}
 	return domain.Candidate{Article: article, HTML: body, AudioURL: audio, AudioType: "audio/mpeg"}, nil
+}
+
+func isBoilerplate(text string) bool {
+	value := strings.ToLower(strings.TrimSpace(text))
+	for _, phrase := range []string{"no media source currently available", "the code has been copied to your clipboard", "write to us in the comments section", "share your thoughts in the comments section"} {
+		if strings.HasPrefix(value, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) Download(ctx context.Context, target string) ([]byte, string, error) {

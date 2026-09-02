@@ -1,0 +1,103 @@
+import argparse
+import hashlib
+import json
+import os
+import tempfile
+from datetime import datetime, timezone
+
+import boto3
+from botocore.exceptions import ClientError
+from faster_whisper import WhisperModel
+
+from timeline import build_timeline
+
+
+def env(name, default=None):
+    return os.environ.get(name, default)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=1)
+    parser.add_argument("--content-id")
+    args = parser.parse_args()
+    endpoint = ("https" if env("CONTENT_S3_USE_TLS", "false").lower() == "true" else "http") + "://" + env("CONTENT_S3_ENDPOINT", "minio:9000")
+    bucket = env("CONTENT_S3_BUCKET", "voa-content-library")
+    s3 = boto3.client("s3", endpoint_url=endpoint, aws_access_key_id=env("CONTENT_S3_ACCESS_KEY"), aws_secret_access_key=env("CONTENT_S3_SECRET_KEY"), region_name="us-east-1")
+    model_name = env("ALIGN_MODEL", "base.en")
+    alignment_version = env("ALIGNMENT_VERSION", "v2")
+    model = WhisperModel(model_name, device=env("ALIGN_DEVICE", "cpu"), compute_type=env("ALIGN_COMPUTE_TYPE", "int8"), download_root="/models")
+    attempted = 0
+    for key in manifest_keys(s3, bucket):
+        manifest = read_json(s3, bucket, key)
+        if args.content_id and manifest["content_id"] != args.content_id:
+            continue
+        output_key = f'enrichments/{manifest["source"]}/{manifest["content_id"]}/alignment/{model_name}-{alignment_version}/timeline.json'
+        if exists(s3, bucket, output_key):
+            continue
+        attempted += 1
+        try:
+            align_one(s3, bucket, manifest, output_key, model, model_name, alignment_version)
+            print(json.dumps({"event": "timeline_stored", "content_id": manifest["content_id"], "key": output_key}), flush=True)
+        except Exception as error:
+            print(json.dumps({"event": "timeline_failed", "content_id": manifest["content_id"], "error": str(error)}), flush=True)
+        if attempted >= args.limit:
+            break
+
+
+def manifest_keys(s3, bucket):
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix="candidates/"):
+        for item in page.get("Contents", []):
+            if item["Key"].endswith("/manifest.json") and "/voa/" not in item["Key"]:
+                yield item["Key"]
+
+
+def align_one(s3, bucket, manifest, output_key, model, model_name, alignment_version):
+    article = read_json(s3, bucket, manifest["objects"]["article"]["key"])
+    audio = s3.get_object(Bucket=bucket, Key=manifest["objects"]["audio"]["key"])["Body"].read()
+    with tempfile.NamedTemporaryFile(suffix=".mp3") as file:
+        file.write(audio); file.flush()
+        segments, info = model.transcribe(file.name, language="en", word_timestamps=True, vad_filter=True, beam_size=5)
+        words = []
+        for segment in segments:
+            for word in segment.words or []:
+                words.append({"word": word.word, "start": word.start, "end": word.end, "probability": word.probability})
+    sentences = build_timeline(article["paragraphs"], words, int(info.duration * 1000))
+    matched = [s for s in sentences if s["confidence"] > 0]
+    if not matched:
+        raise RuntimeError(f'no transcript alignment for {manifest["content_id"]}')
+    payload = {
+        "schema_version": 1,
+        "content_id": manifest["content_id"],
+        "source": manifest["source"],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "engine": "faster-whisper",
+        "model": model_name,
+        "alignment_version": alignment_version,
+        "audio_sha256": manifest["objects"]["audio"]["sha256"],
+        "article_sha256": manifest["objects"]["article"]["sha256"],
+        "duration_ms": int(info.duration * 1000),
+        "language": info.language,
+        "coverage": round(sum(s["confidence"] for s in sentences) / max(1, len(sentences)), 4),
+        "spoken_sentence_count": sum(1 for sentence in sentences if sentence["spoken"]),
+        "sentences": sentences,
+    }
+    data = json.dumps(payload, ensure_ascii=False, indent=2).encode()
+    s3.put_object(Bucket=bucket, Key=output_key, Body=data, ContentType="application/json", Metadata={"sha256": hashlib.sha256(data).hexdigest()})
+
+
+def read_json(s3, bucket, key):
+    return json.loads(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
+
+
+def exists(s3, bucket, key):
+    try:
+        s3.head_object(Bucket=bucket, Key=key); return True
+    except ClientError as error:
+        if error.response["Error"]["Code"] in ("404", "NoSuchKey"): return False
+        raise
+
+
+if __name__ == "__main__":
+    main()

@@ -18,6 +18,16 @@ candidates/<source-connector-id>/<content-id>/
 
 `manifest.json` 是 CMS 的稳定交换契约。状态只会是 `candidate`，是否上架由 CMS 决定。
 
+## 音频与句子时间轴
+
+抓取完成后，独立 aligner 使用 faster-whisper 生成词级时间，再与资料库正文做单调对齐并聚合为每句的 `start_ms/end_ms`：
+
+```sh
+docker compose run --rm aligner --limit 1
+```
+
+结果写入 `enrichments/<source>/<content-id>/alignment/<model>-<alignment-version>/timeline.json`，包含正文和音频哈希、模型版本、覆盖率及逐句置信度。只有至少 50% 词被音频证实的句子才标记为 `spoken=true` 并提供时间；网页附录等未朗读内容保持空时间，App 不应高亮。对齐失败不影响原始 candidate，可独立重试。
+
 ## 本地试运行
 
 ```sh

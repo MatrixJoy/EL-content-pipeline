@@ -10,4 +10,4 @@ rsync -az --delete \
   --exclude data \
   --exclude .DS_Store \
   ./ "$REMOTE_HOST:$REMOTE_DIR/"
-ssh "$REMOTE_HOST" "cd '$REMOTE_DIR' && docker compose build crawler && docker compose up -d minio"
+ssh "$REMOTE_HOST" "cd '$REMOTE_DIR' && docker compose build crawler aligner && docker compose up -d minio"
