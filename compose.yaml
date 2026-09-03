@@ -52,7 +52,7 @@ services:
   crawler-worker:
     image: voa-content-library-crawler
     restart: on-failure
-    command: ["-source", "voa", "-limit", "0"]
+    command: ["-source", "voa", "-limit", "${CONTENT_BUILD_BATCH_SIZE:-5000}"]
     env_file: .env
     volumes:
       - crawler-state:/data

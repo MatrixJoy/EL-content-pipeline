@@ -34,7 +34,7 @@ docker compose run --rm aligner --limit 1
 docker compose up -d crawler-worker aligner-worker
 ```
 
-`crawler-worker` 遍历配置范围内的来源并断点续跑；`aligner-worker` 每分钟发现新增 candidate，持续补齐句级时间轴。抓取完成后 crawler 正常退出，对齐进程继续等待新数据源内容。
+`crawler-worker` 遍历配置范围内的来源并断点续跑；`aligner-worker` 每分钟发现新增 candidate，持续补齐句级时间轴。抓取完成后 crawler 正常退出，对齐进程继续等待新数据源内容。单批默认检查 5,000 个新候选，可用 `CONTENT_BUILD_BATCH_SIZE` 按对象存储容量调整，下一批会从断点继续。
 
 ## 本地试运行
 
