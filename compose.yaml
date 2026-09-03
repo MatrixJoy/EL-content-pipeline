@@ -11,7 +11,7 @@ services:
       - "9002:9000"
       - "9003:9001"
     volumes:
-      - object-data:/data
+      - ${CONTENT_OBJECT_DATA_PATH:-./data/objects}:/data
 
   init-state:
     image: alpine:3.22
@@ -79,6 +79,5 @@ services:
         condition: service_started
 
 volumes:
-  object-data:
   crawler-state:
   aligner-models:

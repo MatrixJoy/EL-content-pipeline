@@ -53,3 +53,5 @@ VOA 当前最新索引包含大量无音频普通新闻。首次建库可用 `CO
 ## 部署与迁移
 
 采集进程只依赖 S3 协议。内网使用 MinIO，迁到公有云时将 bucket 镜像到目标对象存储，再替换 `CONTENT_S3_*` 配置即可；manifest 不保存供应商地址。详见 [docs/architecture.md](docs/architecture.md)。
+
+MinIO 数据目录由 `CONTENT_OBJECT_DATA_PATH` 配置。生产环境应指向独立数据盘；切换路径前必须停止 MinIO、完整复制并核对普通文件数量和字节总和，原数据卷保留至新路径完成读写验证。
