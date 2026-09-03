@@ -28,6 +28,14 @@ docker compose run --rm aligner --limit 1
 
 结果写入 `enrichments/<source>/<content-id>/alignment/<model>-<alignment-version>/timeline.json`，包含正文和音频哈希、模型版本、覆盖率及逐句置信度。只有至少 50% 词被音频证实的句子才标记为 `spoken=true` 并提供时间；网页附录等未朗读内容保持空时间，App 不应高亮。对齐失败不影响原始 candidate，可独立重试。
 
+## 正式建库
+
+```sh
+docker compose up -d crawler-worker aligner-worker
+```
+
+`crawler-worker` 遍历配置范围内的来源并断点续跑；`aligner-worker` 每分钟发现新增 candidate，持续补齐句级时间轴。抓取完成后 crawler 正常退出，对齐进程继续等待新数据源内容。
+
 ## 本地试运行
 
 ```sh

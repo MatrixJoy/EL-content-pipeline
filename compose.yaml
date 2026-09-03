@@ -49,6 +49,35 @@ services:
       minio:
         condition: service_started
 
+  crawler-worker:
+    image: voa-content-library-crawler
+    restart: on-failure
+    command: ["-source", "voa", "-limit", "0"]
+    env_file: .env
+    volumes:
+      - crawler-state:/data
+    depends_on:
+      minio:
+        condition: service_started
+      init-state:
+        condition: service_completed_successfully
+
+  aligner-worker:
+    image: voa-content-library-aligner
+    restart: unless-stopped
+    command: ["--watch", "--limit", "25", "--poll-seconds", "60"]
+    env_file: .env
+    environment:
+      ALIGN_MODEL: ${ALIGN_MODEL:-base.en}
+      ALIGN_DEVICE: ${ALIGN_DEVICE:-cpu}
+      ALIGN_COMPUTE_TYPE: ${ALIGN_COMPUTE_TYPE:-int8}
+      ALIGNMENT_VERSION: ${ALIGNMENT_VERSION:-v2}
+    volumes:
+      - aligner-models:/models
+    depends_on:
+      minio:
+        condition: service_started
+
 volumes:
   object-data:
   crawler-state:
