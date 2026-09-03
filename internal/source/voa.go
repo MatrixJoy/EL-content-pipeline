@@ -32,7 +32,7 @@ type Client struct {
 }
 
 func NewVOA(sitemap, userAgent string, delay time.Duration, maxArticleID int) *Client {
-	return &Client{http: &http.Client{Timeout: 45 * time.Second}, sitemap: sitemap, userAgent: userAgent, delay: delay, maxArticleID: maxArticleID}
+	return &Client{http: &http.Client{Timeout: 2 * time.Minute}, sitemap: sitemap, userAgent: userAgent, delay: delay, maxArticleID: maxArticleID}
 }
 
 func (c *Client) ID() string          { return "voa-learning-english" }
