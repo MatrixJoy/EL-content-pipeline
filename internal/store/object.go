@@ -9,7 +9,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/oldj/voa-content-pipeline/internal/domain"
+	"github.com/oldj/english-learning/content-pipeline/internal/domain"
 )
 
 type Objects struct {

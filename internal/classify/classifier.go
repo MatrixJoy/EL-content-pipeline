@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/oldj/voa-content-pipeline/internal/domain"
+	"github.com/oldj/english-learning/content-pipeline/internal/domain"
 )
 
 type Classifier interface {

@@ -1,4 +1,4 @@
-# VOA Content Pipeline
+# English Learning Content Pipeline
 
 独立于 App 后台的多数据源音频学习资料采集工程。它只生产可审核的内容包，不直接发布内容，也不调用 App API。VOA 是第一个 Source Connector，不是 Pipeline 的内置假设。
 

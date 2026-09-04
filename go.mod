@@ -1,4 +1,4 @@
-module github.com/oldj/voa-content-pipeline
+module github.com/oldj/english-learning/content-pipeline
 
 go 1.25.0
 

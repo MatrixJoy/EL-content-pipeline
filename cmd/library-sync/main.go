@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/oldj/voa-content-pipeline/internal/classify"
-	"github.com/oldj/voa-content-pipeline/internal/config"
-	"github.com/oldj/voa-content-pipeline/internal/pipeline"
-	"github.com/oldj/voa-content-pipeline/internal/source"
-	"github.com/oldj/voa-content-pipeline/internal/store"
+	"github.com/oldj/english-learning/content-pipeline/internal/classify"
+	"github.com/oldj/english-learning/content-pipeline/internal/config"
+	"github.com/oldj/english-learning/content-pipeline/internal/pipeline"
+	"github.com/oldj/english-learning/content-pipeline/internal/source"
+	"github.com/oldj/english-learning/content-pipeline/internal/store"
 )
 
 func main() {

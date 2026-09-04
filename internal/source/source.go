@@ -3,7 +3,7 @@ package source
 import (
 	"context"
 
-	"github.com/oldj/voa-content-pipeline/internal/domain"
+	"github.com/oldj/english-learning/content-pipeline/internal/domain"
 )
 
 // Connector is the only contract the pipeline requires from a content source.

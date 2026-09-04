@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/oldj/voa-content-pipeline/internal/classify"
-	"github.com/oldj/voa-content-pipeline/internal/domain"
-	"github.com/oldj/voa-content-pipeline/internal/source"
-	"github.com/oldj/voa-content-pipeline/internal/store"
+	"github.com/oldj/english-learning/content-pipeline/internal/classify"
+	"github.com/oldj/english-learning/content-pipeline/internal/domain"
+	"github.com/oldj/english-learning/content-pipeline/internal/source"
+	"github.com/oldj/english-learning/content-pipeline/internal/store"
 )
 
 type Runner struct {

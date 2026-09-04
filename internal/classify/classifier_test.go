@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/oldj/voa-content-pipeline/internal/domain"
+	"github.com/oldj/english-learning/content-pipeline/internal/domain"
 )
 
 func TestRulesClassifyLearningUses(t *testing.T) {
