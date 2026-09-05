@@ -1,5 +1,5 @@
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates tzdata && addgroup -S app && adduser -S -G app app
+RUN apk add --no-cache ca-certificates tzdata
 COPY .deploy/library-sync /usr/local/bin/library-sync
-USER app
+USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/library-sync"]
