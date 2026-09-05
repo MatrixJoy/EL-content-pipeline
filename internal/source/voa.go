@@ -200,6 +200,7 @@ func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Can
 }
 
 var featuredWordPrefix = regexp.MustCompile(`(?i)^[\s\p{Zs}]*[–—-]?[\s\p{Zs}]*(phr(?:asal)?\s+v|n|v|adj|adv|prep|pron)\.[\s\p{Zs}]*`)
+var completeFeaturedWord = regexp.MustCompile(`(?i)^(.{1,80}?)\s+[–—-]\s*(phr(?:asal)?\s+v|n|v|adj|adv|prep|pron)\.\s+(.+)$`)
 
 func findFeaturedWords(doc *goquery.Document) ([]domain.FeaturedWord, map[any]struct{}) {
 	excluded := make(map[any]struct{})
@@ -238,7 +239,13 @@ func findFeaturedWords(doc *goquery.Document) ([]domain.FeaturedWord, map[any]st
 func parseFeaturedWord(paragraph *goquery.Selection) (domain.FeaturedWord, bool) {
 	word := clean(paragraph.Find("strong").First().Text())
 	text := clean(paragraph.Text())
-	if word == "" || text == "" || !strings.HasPrefix(text, word) {
+	if word == "" || text == "" {
+		return domain.FeaturedWord{}, false
+	}
+	if match := completeFeaturedWord.FindStringSubmatch(text); len(match) == 4 {
+		return domain.FeaturedWord{Word: clean(match[1]), PartOfSpeech: normalizePartOfSpeech(match[2]), Definition: clean(match[3])}, true
+	}
+	if !strings.HasPrefix(text, word) {
 		return domain.FeaturedWord{}, false
 	}
 	remainder := strings.TrimSpace(strings.TrimPrefix(text, word))

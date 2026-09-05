@@ -43,6 +43,7 @@ func TestFetchCandidateExtractsFeaturedWordsAndRemovesFooter(t *testing.T) {
 <h2><strong>Words in This Story</strong></h2>
 <p><strong>pest</strong> –n. an animal or insect that causes problems</p>
 <p><strong>hang out</strong> - <em>phr v.</em> to spend time together</p>
+<p><strong>kitche</strong>n - n. the room where food is made</p>
 <p>We want to hear from you in the comments section.</p>
 </div><audio src="%s/audio.mp3"></audio></body></html>`, server.URL)
 	}))
@@ -59,7 +60,7 @@ func TestFetchCandidateExtractsFeaturedWordsAndRemovesFooter(t *testing.T) {
 	if len(candidate.Article.Paragraphs) != 1 {
 		t.Fatalf("paragraphs = %#v", candidate.Article.Paragraphs)
 	}
-	if len(candidate.Article.FeaturedWords) != 2 {
+	if len(candidate.Article.FeaturedWords) != 3 {
 		t.Fatalf("featured words = %#v", candidate.Article.FeaturedWords)
 	}
 	if got := candidate.Article.FeaturedWords[0]; got.Word != "pest" || got.PartOfSpeech != "noun" || got.Definition != "an animal or insect that causes problems" {
@@ -67,5 +68,8 @@ func TestFetchCandidateExtractsFeaturedWordsAndRemovesFooter(t *testing.T) {
 	}
 	if got := candidate.Article.FeaturedWords[1]; got.PartOfSpeech != "phrasal verb" || got.Definition != "to spend time together" {
 		t.Fatalf("second featured word = %#v", got)
+	}
+	if got := candidate.Article.FeaturedWords[2]; got.Word != "kitchen" || got.PartOfSpeech != "noun" || got.Definition != "the room where food is made" {
+		t.Fatalf("malformed source word = %#v", got)
 	}
 }
