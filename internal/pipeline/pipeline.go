@@ -66,20 +66,24 @@ func (r *Runner) one(ctx context.Context, u string) error {
 	if err != nil {
 		return err
 	}
-	audio, mediaType, err := r.Source.Download(ctx, c.AudioURL)
+	prefix := path.Join("candidates", r.Source.ID(), c.Article.ContentID)
+	audioKey := path.Join(prefix, "audio.mp3")
+	audio, mediaType, err := r.Objects.Get(ctx, audioKey)
 	if err != nil {
-		return fmt.Errorf("download audio: %w", err)
+		audio, mediaType, err = r.Source.Download(ctx, c.AudioURL)
+		if err != nil {
+			return fmt.Errorf("download audio: %w", err)
+		}
 	}
 	if !strings.Contains(strings.ToLower(mediaType), "audio") && !strings.Contains(strings.ToLower(mediaType), "mpeg") {
 		return fmt.Errorf("unexpected audio type %q", mediaType)
 	}
-	prefix := path.Join("candidates", r.Source.ID(), c.Article.ContentID)
 	articleJSON, _ := json.MarshalIndent(c.Article, "", "  ")
 	objects := map[string]domain.Object{}
 	for name, item := range map[string]struct {
 		key, kind string
 		data      []byte
-	}{"article": {path.Join(prefix, "article.json"), "application/json", articleJSON}, "source": {path.Join(prefix, "source.html"), "text/html", c.HTML}, "audio": {path.Join(prefix, "audio.mp3"), "audio/mpeg", audio}} {
+	}{"article": {path.Join(prefix, "article.json"), "application/json", articleJSON}, "source": {path.Join(prefix, "source.html"), "text/html", c.HTML}, "audio": {audioKey, "audio/mpeg", audio}} {
 		obj, e := r.Objects.Put(ctx, item.key, item.kind, item.data)
 		if e != nil {
 			return e
