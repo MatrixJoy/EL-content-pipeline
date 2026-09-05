@@ -7,19 +7,26 @@ type Paragraph struct {
 	Text  string `json:"text"`
 }
 
+type FeaturedWord struct {
+	Word         string `json:"word"`
+	PartOfSpeech string `json:"part_of_speech,omitempty"`
+	Definition   string `json:"definition"`
+}
+
 type Article struct {
-	SchemaVersion int         `json:"schema_version"`
-	ContentID     string      `json:"content_id"`
-	SourceURL     string      `json:"source_url"`
-	Title         string      `json:"title"`
-	Description   string      `json:"description,omitempty"`
-	Series        string      `json:"series,omitempty"`
-	PublishedAt   string      `json:"published_at,omitempty"`
-	Level         string      `json:"level,omitempty"`
-	Topics        []string    `json:"topics,omitempty"`
-	Language      string      `json:"language"`
-	WordCount     int         `json:"word_count"`
-	Paragraphs    []Paragraph `json:"paragraphs"`
+	SchemaVersion int            `json:"schema_version"`
+	ContentID     string         `json:"content_id"`
+	SourceURL     string         `json:"source_url"`
+	Title         string         `json:"title"`
+	Description   string         `json:"description,omitempty"`
+	Series        string         `json:"series,omitempty"`
+	PublishedAt   string         `json:"published_at,omitempty"`
+	Level         string         `json:"level,omitempty"`
+	Topics        []string       `json:"topics,omitempty"`
+	Language      string         `json:"language"`
+	WordCount     int            `json:"word_count"`
+	Paragraphs    []Paragraph    `json:"paragraphs"`
+	FeaturedWords []FeaturedWord `json:"featured_words,omitempty"`
 }
 
 type Classification struct {

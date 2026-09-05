@@ -35,8 +35,9 @@ func NewVOA(sitemap, userAgent string, delay time.Duration, maxArticleID int) *C
 	return &Client{http: &http.Client{Timeout: 2 * time.Minute}, sitemap: sitemap, userAgent: userAgent, delay: delay, maxArticleID: maxArticleID}
 }
 
-func (c *Client) ID() string          { return "voa-learning-english" }
-func (c *Client) Attribution() string { return "VOA Learning English" }
+func (c *Client) ID() string             { return "voa-learning-english" }
+func (c *Client) ExtractionVersion() int { return 3 }
+func (c *Client) Attribution() string    { return "VOA Learning English" }
 
 func (c *Client) get(ctx context.Context, target string) ([]byte, string, error) {
 	c.mu.Lock()
@@ -174,8 +175,12 @@ func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Can
 	if len(idMatch) < 2 {
 		return domain.Candidate{}, fmt.Errorf("no source id")
 	}
+	featuredWords, excludedParagraphs := findFeaturedWords(doc)
 	paragraphs := make([]domain.Paragraph, 0)
 	doc.Find(".wsw p, .article-body p, .article__body p").Each(func(_ int, s *goquery.Selection) {
+		if _, excluded := excludedParagraphs[s.Get(0)]; excluded {
+			return
+		}
 		t := clean(s.Text())
 		if len(t) >= 20 && !isBoilerplate(t) {
 			paragraphs = append(paragraphs, domain.Paragraph{Index: len(paragraphs), Text: t})
@@ -190,13 +195,90 @@ func (c *Client) FetchCandidate(ctx context.Context, pageURL string) (domain.Can
 	for _, paragraph := range paragraphs {
 		wordCount += len(strings.Fields(paragraph.Text))
 	}
-	article := domain.Article{SchemaVersion: 2, ContentID: "voa-" + idMatch[1], SourceURL: pageURL, Title: title, Description: doc.Find(`meta[name="description"]`).AttrOr("content", ""), Series: series, PublishedAt: published(doc), Level: level(series + " " + keywords), Topics: topics(series, keywords), Language: "en", WordCount: wordCount, Paragraphs: paragraphs}
+	article := domain.Article{SchemaVersion: c.ExtractionVersion(), ContentID: "voa-" + idMatch[1], SourceURL: pageURL, Title: title, Description: doc.Find(`meta[name="description"]`).AttrOr("content", ""), Series: series, PublishedAt: published(doc), Level: level(series + " " + keywords), Topics: topics(series, keywords), Language: "en", WordCount: wordCount, Paragraphs: paragraphs, FeaturedWords: featuredWords}
 	return domain.Candidate{Article: article, HTML: body, AudioURL: audio, AudioType: "audio/mpeg"}, nil
+}
+
+var featuredWordPrefix = regexp.MustCompile(`(?i)^[\s\p{Zs}]*[–—-]?[\s\p{Zs}]*(phr(?:asal)?\s+v|n|v|adj|adv|prep|pron)\.[\s\p{Zs}]*`)
+
+func findFeaturedWords(doc *goquery.Document) ([]domain.FeaturedWord, map[any]struct{}) {
+	excluded := make(map[any]struct{})
+	var heading *goquery.Selection
+	doc.Find(".wsw h2, .wsw h3, .article-body h2, .article-body h3, .article__body h2, .article__body h3").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		value := strings.ToLower(clean(s.Text()))
+		if value == "words in this story" || value == "words in the story" {
+			heading = s
+			return false
+		}
+		return true
+	})
+	if heading == nil {
+		return nil, excluded
+	}
+
+	words := make([]domain.FeaturedWord, 0)
+	for sibling := heading.Next(); sibling.Length() > 0; sibling = sibling.Next() {
+		tag := strings.ToLower(goquery.NodeName(sibling))
+		if tag == "h1" || tag == "h2" || tag == "h3" {
+			break
+		}
+		paragraphs := sibling.Filter("p").AddSelection(sibling.Find("p"))
+		paragraphs.Each(func(_ int, paragraph *goquery.Selection) {
+			if node := paragraph.Get(0); node != nil {
+				excluded[node] = struct{}{}
+			}
+			if word, ok := parseFeaturedWord(paragraph); ok {
+				words = append(words, word)
+			}
+		})
+	}
+	return words, excluded
+}
+
+func parseFeaturedWord(paragraph *goquery.Selection) (domain.FeaturedWord, bool) {
+	word := clean(paragraph.Find("strong").First().Text())
+	text := clean(paragraph.Text())
+	if word == "" || text == "" || !strings.HasPrefix(text, word) {
+		return domain.FeaturedWord{}, false
+	}
+	remainder := strings.TrimSpace(strings.TrimPrefix(text, word))
+	partOfSpeech := ""
+	if match := featuredWordPrefix.FindStringSubmatch(remainder); len(match) == 2 {
+		partOfSpeech = normalizePartOfSpeech(match[1])
+		remainder = strings.TrimSpace(featuredWordPrefix.ReplaceAllString(remainder, ""))
+	} else {
+		remainder = strings.TrimSpace(strings.TrimLeft(remainder, "–—-"))
+	}
+	if remainder == "" {
+		return domain.FeaturedWord{}, false
+	}
+	return domain.FeaturedWord{Word: word, PartOfSpeech: partOfSpeech, Definition: remainder}, true
+}
+
+func normalizePartOfSpeech(value string) string {
+	switch strings.ToLower(strings.Join(strings.Fields(value), " ")) {
+	case "n":
+		return "noun"
+	case "v":
+		return "verb"
+	case "adj":
+		return "adjective"
+	case "adv":
+		return "adverb"
+	case "prep":
+		return "preposition"
+	case "pron":
+		return "pronoun"
+	case "phr v", "phrasal v":
+		return "phrasal verb"
+	default:
+		return strings.TrimSpace(value)
+	}
 }
 
 func isBoilerplate(text string) bool {
 	value := strings.ToLower(strings.TrimSpace(text))
-	for _, phrase := range []string{"no media source currently available", "the code has been copied to your clipboard", "write to us in the comments section", "share your thoughts in the comments section"} {
+	for _, phrase := range []string{"no media source currently available", "the code has been copied to your clipboard", "write to us in the comments section", "share your thoughts in the comments section", "we want to hear from you"} {
 		if strings.HasPrefix(value, phrase) {
 			return true
 		}

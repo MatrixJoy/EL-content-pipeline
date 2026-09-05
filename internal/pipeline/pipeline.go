@@ -39,7 +39,7 @@ func (r *Runner) Run(ctx context.Context, limit int) error {
 func (r *Runner) RunURLs(ctx context.Context, urls []string, limit int) error {
 	processed := 0
 	for _, u := range urls {
-		stateKey := r.Source.ID() + "|" + u
+		stateKey := fmt.Sprintf("%s|extract-v%d|%s", r.Source.ID(), r.Source.ExtractionVersion(), u)
 		if r.State.Done(stateKey) {
 			continue
 		}

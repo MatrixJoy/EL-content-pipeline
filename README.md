@@ -44,7 +44,7 @@ docker compose up -d minio
 go run ./cmd/library-sync -limit 10
 ```
 
-默认启用 VOA connector，读取其官方 sitemap，只处理有 MP3 的文章并跳过视频 sitemap。使用 `source-id + URL` 记录独立抓取状态，多数据源之间不会碰撞。
+默认启用 VOA connector，读取其官方 sitemap，只处理有 MP3 的文章并跳过视频 sitemap。使用 `source-id + extraction-version + URL` 记录独立抓取状态；解析规则升级时会重新清洗旧资料，多数据源之间不会碰撞。VOA 的 “Words in This Story” 会保存为独立的 `featured_words`，不会混入正文或评论说明。
 
 VOA 当前最新索引包含大量无音频普通新闻。首次建库可用 `CONTENT_VOA_MAX_ARTICLE_ID` 设置历史游标，从已验证的音频内容段开始；设为 `0` 表示不限制。该字段只属于 VOA connector，不进入通用内容模型。
 
