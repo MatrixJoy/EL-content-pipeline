@@ -36,7 +36,7 @@ func NewVOA(sitemap, userAgent string, delay time.Duration, maxArticleID int) *C
 }
 
 func (c *Client) ID() string             { return "voa-learning-english" }
-func (c *Client) ExtractionVersion() int { return 3 }
+func (c *Client) ExtractionVersion() int { return 4 }
 func (c *Client) Attribution() string    { return "VOA Learning English" }
 
 func (c *Client) get(ctx context.Context, target string) ([]byte, string, error) {

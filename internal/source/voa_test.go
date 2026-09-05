@@ -54,7 +54,7 @@ func TestFetchCandidateExtractsFeaturedWordsAndRemovesFooter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candidate.Article.SchemaVersion != 3 {
+	if candidate.Article.SchemaVersion != 4 {
 		t.Fatalf("schema version = %d", candidate.Article.SchemaVersion)
 	}
 	if len(candidate.Article.Paragraphs) != 1 {
