@@ -68,3 +68,9 @@ def build_timeline(paragraphs, asr_words, duration_ms):
         sentence["end_ms"] = min(duration_ms, max(sentence["start_ms"] + 1, sentence["end_ms"]))
         previous = sentence["end_ms"]
     return sentences
+
+
+def timeline_stats(sentences):
+    coverage = round(sum(sentence["confidence"] for sentence in sentences) / max(1, len(sentences)), 4)
+    spoken_sentence_count = sum(1 for sentence in sentences if sentence["spoken"])
+    return coverage, spoken_sentence_count

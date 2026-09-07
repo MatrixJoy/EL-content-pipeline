@@ -10,7 +10,8 @@ import boto3
 from botocore.exceptions import ClientError
 from faster_whisper import WhisperModel
 
-from timeline import build_timeline
+from retry_state import FailureRetry
+from timeline import build_timeline, timeline_stats
 
 
 def env(name, default=None):
@@ -23,6 +24,7 @@ def main():
     parser.add_argument("--content-id")
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--poll-seconds", type=int, default=60)
+    parser.add_argument("--failure-retry-seconds", type=int, default=int(env("ALIGN_FAILURE_RETRY_SECONDS", "3600")))
     args = parser.parse_args()
     endpoint = ("https" if env("CONTENT_S3_USE_TLS", "false").lower() == "true" else "http") + "://" + env("CONTENT_S3_ENDPOINT", "minio:9000")
     bucket = env("CONTENT_S3_BUCKET", "voa-content-library")
@@ -30,23 +32,23 @@ def main():
     model_name = env("ALIGN_MODEL", "base.en")
     alignment_version = env("ALIGNMENT_VERSION", "v2")
     model = WhisperModel(model_name, device=env("ALIGN_DEVICE", "cpu"), compute_type=env("ALIGN_COMPUTE_TYPE", "int8"), download_root="/models")
-    failed_this_run = set()
+    failures = FailureRetry(args.failure_retry_seconds)
     while True:
-        attempted = process_batch(s3, bucket, model, model_name, alignment_version, args, failed_this_run)
+        attempted = process_batch(s3, bucket, model, model_name, alignment_version, args, failures)
         if not args.watch:
             break
         print(json.dumps({"event": "alignment_poll_complete", "attempted": attempted, "retry_in_seconds": args.poll_seconds}), flush=True)
         time.sleep(max(5, args.poll_seconds))
 
 
-def process_batch(s3, bucket, model, model_name, alignment_version, args, failed_this_run):
+def process_batch(s3, bucket, model, model_name, alignment_version, args, failures):
     attempted = 0
     for key in manifest_keys(s3, bucket):
         manifest = read_json(s3, bucket, key)
         content_id = manifest["content_id"]
         if args.content_id and content_id != args.content_id:
             continue
-        if content_id in failed_this_run:
+        if not failures.ready(content_id):
             continue
         output_key = f'enrichments/{manifest["source"]}/{content_id}/alignment/{model_name}-{alignment_version}/timeline.json'
         if exists(s3, bucket, output_key):
@@ -54,10 +56,11 @@ def process_batch(s3, bucket, model, model_name, alignment_version, args, failed
         attempted += 1
         try:
             align_one(s3, bucket, manifest, output_key, model, model_name, alignment_version)
+            failures.succeeded(content_id)
             print(json.dumps({"event": "timeline_stored", "content_id": content_id, "key": output_key}), flush=True)
         except Exception as error:
-            failed_this_run.add(content_id)
-            print(json.dumps({"event": "timeline_failed", "content_id": content_id, "error": str(error)}), flush=True)
+            failures.failed(content_id)
+            print(json.dumps({"event": "timeline_failed", "content_id": content_id, "error": str(error), "retry_in_seconds": failures.cooldown_seconds}), flush=True)
         if attempted >= args.limit:
             break
     return attempted
@@ -82,9 +85,9 @@ def align_one(s3, bucket, manifest, output_key, model, model_name, alignment_ver
             for word in segment.words or []:
                 words.append({"word": word.word, "start": word.start, "end": word.end, "probability": word.probability})
     sentences = build_timeline(article["paragraphs"], words, int(info.duration * 1000))
-    matched = [s for s in sentences if s["confidence"] > 0]
-    if not matched:
-        raise RuntimeError(f'no transcript alignment for {manifest["content_id"]}')
+    coverage, spoken_sentence_count = timeline_stats(sentences)
+    if spoken_sentence_count == 0:
+        raise RuntimeError(f'no usable sentence timeline for {manifest["content_id"]}')
     payload = {
         "schema_version": 1,
         "content_id": manifest["content_id"],
@@ -97,8 +100,8 @@ def align_one(s3, bucket, manifest, output_key, model, model_name, alignment_ver
         "article_sha256": manifest["objects"]["article"]["sha256"],
         "duration_ms": int(info.duration * 1000),
         "language": info.language,
-        "coverage": round(sum(s["confidence"] for s in sentences) / max(1, len(sentences)), 4),
-        "spoken_sentence_count": sum(1 for sentence in sentences if sentence["spoken"]),
+        "coverage": coverage,
+        "spoken_sentence_count": spoken_sentence_count,
         "sentences": sentences,
     }
     data = json.dumps(payload, ensure_ascii=False, indent=2).encode()
