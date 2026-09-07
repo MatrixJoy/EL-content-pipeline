@@ -13,20 +13,32 @@ type FeaturedWord struct {
 	Definition   string `json:"definition"`
 }
 
+type GrammarPoint struct {
+	Kind        string   `json:"kind"`
+	Title       string   `json:"title"`
+	Explanation string   `json:"explanation"`
+	Example     string   `json:"example"`
+	Prompt      string   `json:"prompt"`
+	Answer      string   `json:"answer"`
+	Options     []string `json:"options"`
+}
+
 type Article struct {
-	SchemaVersion int            `json:"schema_version"`
-	ContentID     string         `json:"content_id"`
-	SourceURL     string         `json:"source_url"`
-	Title         string         `json:"title"`
-	Description   string         `json:"description,omitempty"`
-	Series        string         `json:"series,omitempty"`
-	PublishedAt   string         `json:"published_at,omitempty"`
-	Level         string         `json:"level,omitempty"`
-	Topics        []string       `json:"topics,omitempty"`
-	Language      string         `json:"language"`
-	WordCount     int            `json:"word_count"`
-	Paragraphs    []Paragraph    `json:"paragraphs"`
-	FeaturedWords []FeaturedWord `json:"featured_words,omitempty"`
+	SchemaVersion  int            `json:"schema_version"`
+	ContentID      string         `json:"content_id"`
+	SourceURL      string         `json:"source_url"`
+	Title          string         `json:"title"`
+	Description    string         `json:"description,omitempty"`
+	Series         string         `json:"series,omitempty"`
+	PublishedAt    string         `json:"published_at,omitempty"`
+	Level          string         `json:"level,omitempty"`
+	Topics         []string       `json:"topics,omitempty"`
+	Language       string         `json:"language"`
+	WordCount      int            `json:"word_count"`
+	Paragraphs     []Paragraph    `json:"paragraphs"`
+	FeaturedWords  []FeaturedWord `json:"featured_words,omitempty"`
+	GrammarVersion int            `json:"grammar_version,omitempty"`
+	GrammarPoints  []GrammarPoint `json:"grammar_points,omitempty"`
 }
 
 type Classification struct {

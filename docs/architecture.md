@@ -4,6 +4,7 @@
 
 - **Source Connector**：每个数据源独立实现发现、读取、来源字段解析和媒体下载；不得包含 CMS 或发布逻辑。
 - **Normalizer / Classifier**：将 connector 输出映射为统一英文学习模型，产生稳定主题 slug、CEFR 估计、学习目标和带规则版本的质量分。分类升级可基于已有 article 对象离线重算，无需重新下载媒体。
+- **Grammar Enricher**：只处理具有 grammar 学习目标的资料，保存可审核的语法类型、解释、原文例句、填空题干、答案与选项；enrichment 使用独立版本化 article 对象，不覆盖原始抓取结果。
 - **Content Pipeline（本仓库）**：编排 connector、分类、去重和持久化，输出 `candidate` 内容包。不能发布。
 - **Content Library（S3 bucket）**：保存来源快照和不可变内容包，是可迁移的资料库；不是 App 在线数据库。
 - **CMS（后续独立模块）**：扫描 candidate manifest，支持编辑分类、难度、词汇与语法标记；运营人员批准后写入发布 outbox。

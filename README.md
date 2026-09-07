@@ -39,6 +39,17 @@ docker compose run --rm crawler -reclassify -apply
 
 应用时只改写分类发生变化的 manifest，并递增其 revision；正文、来源快照、音频和时间轴对象保持不变。重复执行是幂等的。CMS 通过 manifest ETag 自动发现新分类，并按现有安全规则将变化内容恢复为待审核。
 
+## 语法内容 enrichment
+
+对分类为语法学习目标的文章，可从正文中提取高置信度的情态动词、完成时、进行时和条件句，生成例句、简明解释以及基于原文的填空选项：
+
+```sh
+docker compose run --rm crawler -enrich-grammar
+docker compose run --rm crawler -enrich-grammar -apply
+```
+
+默认只读预检。应用后写入新的 `article.grammar-v<version>.json`，再原子切换 manifest 引用；原始 `article.json`、音频和时间轴不被覆盖。非语法类内容不会生成低相关度练习。
+
 ## 正式建库
 
 ```sh
