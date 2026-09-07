@@ -18,6 +18,8 @@ func main() {
 	limit := flag.Int("limit", 0, "maximum new URLs to inspect; 0 means all")
 	singleURL := flag.String("url", "", "inspect one article URL instead of discovering the sitemap")
 	sourceID := flag.String("source", "voa", "configured source connector")
+	reclassify := flag.Bool("reclassify", false, "recompute classifications from stored article objects without crawling")
+	apply := flag.Bool("apply", false, "persist reclassification changes; otherwise report a dry run")
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load()
@@ -27,17 +29,28 @@ func main() {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+	objects, err := store.NewObjects(ctx, cfg.Endpoint, cfg.AccessKey, cfg.SecretKey, cfg.Bucket, cfg.UseTLS)
+	if err != nil {
+		logger.Error("object storage failed", "error", err)
+		os.Exit(1)
+	}
+	classifier := classify.Rules{}
+	if *reclassify {
+		report, reclassifyErr := pipeline.Reclassify(ctx, objects, classifier, *limit, *apply, logger)
+		if reclassifyErr != nil {
+			logger.Error("reclassification failed", "error", reclassifyErr, "scanned", report.Scanned, "changed", report.Changed, "updated", report.Updated)
+			os.Exit(1)
+		}
+		logger.Info("reclassification complete", "apply", *apply, "rule_version", classifier.Version(), "scanned", report.Scanned, "changed", report.Changed, "updated", report.Updated, "unchanged", report.Unchanged,
+			"quality_0_49", report.Quality0To49, "quality_50_69", report.Quality50To69, "quality_70_79", report.Quality70To79, "quality_80_89", report.Quality80To89, "quality_90_100", report.Quality90To100)
+		return
+	}
 	state, err := store.OpenState(cfg.StatePath)
 	if err != nil {
 		logger.Error("state failed", "error", err)
 		os.Exit(1)
 	}
 	defer state.Close()
-	objects, err := store.NewObjects(ctx, cfg.Endpoint, cfg.AccessKey, cfg.SecretKey, cfg.Bucket, cfg.UseTLS)
-	if err != nil {
-		logger.Error("object storage failed", "error", err)
-		os.Exit(1)
-	}
 	var connector source.Connector
 	switch *sourceID {
 	case "voa":
@@ -46,7 +59,7 @@ func main() {
 		logger.Error("unknown source", "source", *sourceID)
 		os.Exit(2)
 	}
-	runner := pipeline.Runner{Source: connector, Classifier: classify.Rules{}, State: state, Objects: objects, Logger: logger}
+	runner := pipeline.Runner{Source: connector, Classifier: classifier, State: state, Objects: objects, Logger: logger}
 	if *singleURL != "" {
 		err = runner.RunURLs(ctx, []string{*singleURL}, 1)
 	} else {

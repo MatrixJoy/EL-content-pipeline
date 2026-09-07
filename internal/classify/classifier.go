@@ -11,9 +11,14 @@ import (
 
 type Classifier interface {
 	Classify(domain.Article) domain.Classification
+	Version() int
 }
 
 type Rules struct{}
+
+const RulesVersion = 2
+
+func (Rules) Version() int { return RulesVersion }
 
 var topicRules = []struct {
 	slug  string
@@ -66,29 +71,54 @@ func (Rules) Classify(a domain.Article) domain.Classification {
 		goals = append(goals, "grammar")
 	}
 	level, confidence := estimateLevel(a, text)
-	quality := 45
-	if a.WordCount >= 250 {
+	quality := 10
+	switch {
+	case a.WordCount >= 250 && a.WordCount <= 1200:
+		quality += 25
+	case a.WordCount >= 150 && a.WordCount < 250:
+		quality += 14
+	case a.WordCount >= 80 && a.WordCount < 150:
+		quality += 5
+	case a.WordCount > 1200 && a.WordCount <= 1800:
+		quality += 18
+	case a.WordCount > 1800:
+		quality += 8
+	}
+	switch {
+	case len(a.Paragraphs) >= 5:
 		quality += 15
-	}
-	if a.WordCount >= 600 {
-		quality += 10
-	}
-	if len(a.Paragraphs) >= 5 {
-		quality += 10
+	case len(a.Paragraphs) >= 2:
+		quality += 8
 	}
 	if a.Description != "" {
-		quality += 5
+		quality += 8
 	}
 	if a.PublishedAt != "" {
 		quality += 5
 	}
-	if len(topics) > 0 {
+	if a.Series != "" {
 		quality += 5
+	}
+	if len(topics) == 1 && topics[0] == "general-english" {
+		quality += 3
+	} else {
+		quality += 8
+	}
+	if len(a.FeaturedWords) >= 3 {
+		quality += 10
+	} else if len(a.FeaturedWords) > 0 {
+		quality += 6
+	}
+	if seen["grammar"] || seen["vocabulary"] || seen["stories"] || seen["everyday-english"] {
+		quality += 8
+	}
+	if a.Level != "" && a.Level != "unclassified" {
+		quality += 6
 	}
 	if quality > 100 {
 		quality = 100
 	}
-	return domain.Classification{Media: "audio", Language: "en", Level: level, LevelConfidence: confidence, Series: a.Series, Topics: topics, LearningGoals: goals, QualityScore: quality}
+	return domain.Classification{RuleVersion: RulesVersion, Media: "audio", Language: "en", Level: level, LevelConfidence: confidence, Series: a.Series, Topics: topics, LearningGoals: goals, QualityScore: quality}
 }
 
 func estimateLevel(a domain.Article, text string) (string, float64) {

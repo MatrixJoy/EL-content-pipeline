@@ -30,6 +30,7 @@ type Article struct {
 }
 
 type Classification struct {
+	RuleVersion     int      `json:"rule_version"`
 	Media           string   `json:"media"`
 	Language        string   `json:"language"`
 	Level           string   `json:"level"`

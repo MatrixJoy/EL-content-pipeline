@@ -27,11 +27,45 @@ func TestRulesClassifyLearningUses(t *testing.T) {
 	if got.QualityScore < 80 {
 		t.Errorf("quality score = %d, want >= 80", got.QualityScore)
 	}
+	if got.RuleVersion != RulesVersion {
+		t.Errorf("rule version = %d, want %d", got.RuleVersion, RulesVersion)
+	}
 }
 
 func TestRulesUsesDeclaredLevel(t *testing.T) {
 	got := (Rules{}).Classify(domain.Article{Title: "Lesson", Level: "beginning", WordCount: 300})
 	if got.Level != "beginning" || got.LevelConfidence < .9 {
 		t.Fatalf("level = %s confidence = %f", got.Level, got.LevelConfidence)
+	}
+}
+
+func TestRulesQualityScoreSeparatesIncompleteFromLearningReadyContent(t *testing.T) {
+	incomplete := (Rules{}).Classify(domain.Article{
+		Title:      "Short item",
+		WordCount:  20,
+		Paragraphs: []domain.Paragraph{{Text: "Only a few words."}},
+	})
+	ready := (Rules{}).Classify(domain.Article{
+		Title:       "Useful English Expressions",
+		Series:      "Words and Their Stories",
+		Description: "A structured vocabulary lesson",
+		PublishedAt: "2026-01-01",
+		Level:       "intermediate",
+		WordCount:   650,
+		Paragraphs:  []domain.Paragraph{{Text: "One."}, {Text: "Two."}, {Text: "Three."}, {Text: "Four."}, {Text: "Five."}},
+		FeaturedWords: []domain.FeaturedWord{
+			{Word: "practice", Definition: "to do repeatedly"},
+			{Word: "expression", Definition: "a word or phrase"},
+			{Word: "fluent", Definition: "able to speak easily"},
+		},
+	})
+	if incomplete.QualityScore >= 50 {
+		t.Fatalf("incomplete score = %d, want < 50", incomplete.QualityScore)
+	}
+	if ready.QualityScore < 90 {
+		t.Fatalf("learning-ready score = %d, want >= 90", ready.QualityScore)
+	}
+	if ready.QualityScore <= incomplete.QualityScore {
+		t.Fatalf("ready score %d does not exceed incomplete score %d", ready.QualityScore, incomplete.QualityScore)
 	}
 }

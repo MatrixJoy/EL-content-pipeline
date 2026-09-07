@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -59,4 +60,17 @@ func (s *Objects) Put(ctx context.Context, key, mediaType string, data []byte) (
 		return domain.Object{}, fmt.Errorf("put %s: %w", key, err)
 	}
 	return domain.Object{Key: key, SHA256: hex.EncodeToString(sum[:]), ByteSize: int64(len(data)), MediaType: mediaType}, nil
+}
+
+func (s *Objects) ListKeys(ctx context.Context, prefix, suffix string) ([]string, error) {
+	keys := []string{}
+	for object := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+		if object.Err != nil {
+			return nil, object.Err
+		}
+		if suffix == "" || strings.HasSuffix(object.Key, suffix) {
+			keys = append(keys, object.Key)
+		}
+	}
+	return keys, nil
 }

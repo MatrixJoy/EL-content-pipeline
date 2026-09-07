@@ -28,6 +28,17 @@ docker compose run --rm aligner --limit 1
 
 结果写入 `enrichments/<source>/<content-id>/alignment/<model>-<alignment-version>/timeline.json`，包含正文和音频哈希、模型版本、覆盖率及逐句置信度。只有至少 50% 词被音频证实的句子才标记为 `spoken=true` 并提供时间；网页附录等未朗读内容保持空时间，App 不应高亮。对齐失败不影响原始 candidate，可独立重试。
 
+## 离线重分类
+
+分类规则拥有独立版本。规则升级后直接读取资料库中已有的 `article.json`，不重新抓网页、也不重新下载音频。先执行只读预检，再显式应用：
+
+```sh
+docker compose run --rm crawler -reclassify
+docker compose run --rm crawler -reclassify -apply
+```
+
+应用时只改写分类发生变化的 manifest，并递增其 revision；正文、来源快照、音频和时间轴对象保持不变。重复执行是幂等的。CMS 通过 manifest ETag 自动发现新分类，并按现有安全规则将变化内容恢复为待审核。
+
 ## 正式建库
 
 ```sh
