@@ -1,0 +1,27 @@
+name: Content Pipeline CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Test, vet, and compile
+        run: |
+          go test ./...
+          go vet ./...
+          go build ./...
+      - name: Check alignment Python sources
+        run: python3 -m compileall -q alignment
+      - name: Build crawler container
+        run: docker build --tag english-learning-content-pipeline:ci .
