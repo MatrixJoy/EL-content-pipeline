@@ -23,10 +23,10 @@ type Runner struct {
 	Logger     *slog.Logger
 }
 
-func (r *Runner) Run(ctx context.Context, limit int) error {
+func (r *Runner) Run(ctx context.Context, limit int) (int, error) {
 	items, err := r.Source.Discover(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	r.Logger.Info("discovery complete", "source", r.Source.ID(), "articles", len(items))
 	urls := make([]string, 0, len(items))
@@ -36,7 +36,7 @@ func (r *Runner) Run(ctx context.Context, limit int) error {
 	return r.RunURLs(ctx, urls, limit)
 }
 
-func (r *Runner) RunURLs(ctx context.Context, urls []string, limit int) error {
+func (r *Runner) RunURLs(ctx context.Context, urls []string, limit int) (int, error) {
 	processed := 0
 	for _, u := range urls {
 		stateKey := fmt.Sprintf("%s|extract-v%d|%s", r.Source.ID(), r.Source.ExtractionVersion(), u)
@@ -59,7 +59,7 @@ func (r *Runner) RunURLs(ctx context.Context, urls []string, limit int) error {
 		_ = r.State.Set(stateKey, "complete", "")
 		r.Logger.Info("candidate stored", "url", u)
 	}
-	return nil
+	return processed, nil
 }
 func (r *Runner) one(ctx context.Context, u string) error {
 	c, err := r.Source.FetchCandidate(ctx, u)

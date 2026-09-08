@@ -51,8 +51,8 @@ services:
 
   crawler-worker:
     image: voa-content-library-crawler
-    restart: on-failure
-    command: ["-source", "voa", "-limit", "${CONTENT_BUILD_BATCH_SIZE:-5000}"]
+    restart: unless-stopped
+    command: ["-source", "voa", "-limit", "${CONTENT_BUILD_BATCH_SIZE:-5000}", "-watch", "-batch-delay", "${CONTENT_CRAWL_BATCH_DELAY:-1m}", "-idle-delay", "${CONTENT_CRAWL_IDLE_DELAY:-6h}"]
     env_file: .env
     volumes:
       - crawler-state:/data

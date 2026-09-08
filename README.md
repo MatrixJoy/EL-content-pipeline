@@ -56,7 +56,7 @@ docker compose run --rm crawler -enrich-grammar -apply
 docker compose up -d crawler-worker aligner-worker
 ```
 
-`crawler-worker` 遍历配置范围内的来源并断点续跑；`aligner-worker` 每分钟发现新增 candidate，持续补齐句级时间轴。抓取完成后 crawler 正常退出，对齐进程继续等待新数据源内容。单批默认检查 5,000 个新候选，可用 `CONTENT_BUILD_BATCH_SIZE` 按对象存储容量调整，下一批会从断点继续。
+`crawler-worker` 遍历配置范围内的来源并断点续跑；`aligner-worker` 每分钟发现新增 candidate，持续补齐句级时间轴。crawler 每批默认检查 5,000 个新 URL，批次满时一分钟后继续下一批；没有新 URL 时退避六小时后重新发现来源。可通过 `CONTENT_BUILD_BATCH_SIZE`、`CONTENT_CRAWL_BATCH_DELAY` 和 `CONTENT_CRAWL_IDLE_DELAY` 调整，不会在抓取完成后高频请求来源网站。
 
 ## 本地试运行
 

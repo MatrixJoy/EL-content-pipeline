@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/oldj/english-learning/content-pipeline/internal/classify"
 	"github.com/oldj/english-learning/content-pipeline/internal/config"
@@ -22,6 +23,9 @@ func main() {
 	reclassify := flag.Bool("reclassify", false, "recompute classifications from stored article objects without crawling")
 	enrichGrammar := flag.Bool("enrich-grammar", false, "derive structured grammar practice from stored grammar articles")
 	apply := flag.Bool("apply", false, "persist the selected offline operation; otherwise report a dry run")
+	watch := flag.Bool("watch", false, "keep discovering and processing new source content")
+	batchDelay := flag.Duration("batch-delay", time.Minute, "delay between full crawl batches in watch mode")
+	idleDelay := flag.Duration("idle-delay", 6*time.Hour, "delay after a crawl batch finds no new URLs")
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load()
@@ -77,12 +81,41 @@ func main() {
 	}
 	runner := pipeline.Runner{Source: connector, Classifier: classifier, State: state, Objects: objects, Logger: logger}
 	if *singleURL != "" {
-		err = runner.RunURLs(ctx, []string{*singleURL}, 1)
-	} else {
-		err = runner.Run(ctx, *limit)
+		_, err = runner.RunURLs(ctx, []string{*singleURL}, 1)
+		if err != nil {
+			logger.Error("sync failed", "error", err)
+			os.Exit(1)
+		}
+		return
 	}
-	if err != nil {
-		logger.Error("sync failed", "error", err)
-		os.Exit(1)
+	for {
+		processed, runErr := runner.Run(ctx, *limit)
+		failed := runErr != nil
+		if runErr != nil {
+			logger.Error("sync failed", "error", runErr)
+			if !*watch {
+				os.Exit(1)
+			}
+			processed = 0
+		}
+		if !*watch {
+			return
+		}
+		delay := nextCrawlDelay(processed, *limit, failed, *batchDelay, *idleDelay)
+		logger.Info("crawl poll complete", "processed", processed, "retry_in_seconds", int(delay.Seconds()))
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
+}
+
+func nextCrawlDelay(processed, limit int, failed bool, batchDelay, idleDelay time.Duration) time.Duration {
+	if failed || (limit > 0 && processed >= limit) {
+		return max(batchDelay, time.Second)
+	}
+	return max(idleDelay, time.Second)
 }
